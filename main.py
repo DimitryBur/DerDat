@@ -5,10 +5,17 @@ from views.home import HomeView
 from views.store import StoreView
 from views.clean import CleanView
 from views.export import ExportView
+from views.modeling import ModelingView # НОВЫЙ ИМПОРТ
 
 class MainController(QMainWindow):
     def __init__(self):
         super().__init__()
+        # Загрузка стиля
+        try:
+            with open("style.qss", "r", encoding="utf-8") as f:
+                self.setStyleSheet(f.read())
+        except FileNotFoundError:
+            print("Файл стилей style.qss не найден")
         self.model = DataManager()
         self.setWindowTitle("derDate Pro: Smart Data Cleaner")
         self.resize(1100, 800)
@@ -24,11 +31,13 @@ class MainController(QMainWindow):
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
 
-        self.stack.addWidget(HomeView(self))   # 0
-        self.stack.addWidget(StoreView(self))  # 1
-        self.stack.addWidget(CleanView(self))  # 2
-        self.stack.addWidget(ExportView(self)) # 3
+        self.stack.addWidget(HomeView(self))     # 0
+        self.stack.addWidget(StoreView(self))    # 1
+        self.stack.addWidget(CleanView(self))    # 2
+        self.stack.addWidget(ExportView(self))   # 3
+        self.stack.addWidget(ModelingView(self)) # 4 - SQL ЛАБОРАТОРИЯ
 
+    # ... остальные методы (sync_file, update_appbar, switch_page) без изменений ...
     def sync_file(self):
         name = self.file_combo.currentText()
         if name:
@@ -40,12 +49,14 @@ class MainController(QMainWindow):
         self.file_combo.blockSignals(True)
         self.file_combo.clear()
         self.file_combo.addItems(self.model.all_files.keys())
-        self.file_combo.setCurrentText(self.model.active_file_name)
+        self.file_combo.setCurrentText(self.model.active_file_name or "")
         self.file_combo.blockSignals(False)
         self.sync_file()
 
     def switch_page(self, index):
         self.stack.setCurrentIndex(index)
+        current = self.stack.currentWidget()
+        if hasattr(current, "refresh"): current.refresh()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
