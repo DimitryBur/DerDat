@@ -1,4 +1,5 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox, QFrame
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox
+from PyQt6.QtCore import QTimer, Qt
 
 class CleanView(QWidget):
     def __init__(self, controller):
@@ -6,88 +7,98 @@ class CleanView(QWidget):
         self.controller = controller
         layout = QVBoxLayout(self)
 
-        # 1. Заголовок и выбор основной колонки (Col A)
-        self.info = QLabel("🧪 Лаборатория: выберите столбец для обработки")
-        self.cols = QComboBox()
-        layout.addWidget(self.info)
-        layout.addWidget(self.cols)
+        # --- ВЕРХНЯЯ ПАНЕЛЬ С ИНДИКАТОРОМ ---
+        header_lay = QHBoxLayout()
+        self.info = QLabel("🧪 Лаборатория")
+        
+        # Наша "Лампочка"
+        self.indicator = QLabel()
+        self.indicator.setFixedSize(16, 16)
+        # Начальный стиль (серая/выключена)
+        self.indicator.setStyleSheet("background-color: #555; border-radius: 8px;")
+        
+        header_lay.addWidget(self.info)
+        header_lay.addStretch()
+        header_lay.addWidget(self.indicator)
+        layout.addLayout(header_lay)
 
-        # 2. Блок базовой очистки
-        layout.addWidget(QLabel("<b>🧹 Очистка данных:</b>"))
+        # Таймер для выключения лампочки
+        self.blink_timer = QTimer()
+        self.blink_timer.setSingleShot(True)
+        self.blink_timer.timeout.connect(self.indicator_off)
+
+        # --- Остальной UI (выбор колонок и кнопки) ---
+        self.cols = QComboBox()
+        layout.addWidget(self.cols)
+        
         btn_smart_num = QPushButton("🔢 Извлечь числа (RegEx)")
         btn_smart_num.clicked.connect(self.run_extract)
         
         btn_dropna = QPushButton("🗑 Удалить пустые строки")
         btn_dropna.clicked.connect(self.run_clean)
-        
+
         layout.addWidget(btn_smart_num)
         layout.addWidget(btn_dropna)
 
-        # Разделительная линия для красоты
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setFrameShadow(QFrame.Shadow.Sunken)
-        layout.addWidget(line)
-
-        # 3. Блок Математики (все в одну строку)
-        layout.addWidget(QLabel("<b>🧮 Математические операции:</b>"))
+        # Блок Математики
+        layout.addWidget(QLabel("<b>🧮 Математика:</b>"))
         math_lay = QHBoxLayout()
-        
-        self.cols_b = QComboBox() # Второй список для колонки B
-        btn_math = QPushButton("✖ Умножить Col A на Col B")
-        btn_math.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold;")
+        self.cols_b = QComboBox()
+        btn_math = QPushButton("✖ Умножить на Col A")
         btn_math.clicked.connect(self.run_math)
-        
         math_lay.addWidget(self.cols_b)
         math_lay.addWidget(btn_math)
         layout.addLayout(math_lay)
 
-        layout.addStretch() # Прижимает всё вверх, чтобы кнопки навигации были внизу
-
-        # 4. Навигация
+        # Навигация
         nav = QHBoxLayout()
-        btn_back = QPushButton("⬅ Склад")
+        btn_back = QPushButton("⬅ В магазин")
         btn_back.clicked.connect(lambda: controller.switch_page(1))
-        
         btn_modeling = QPushButton("🔍 SQL Моделирование")
-        btn_modeling.setStyleSheet("background-color: #3498db; color: white;")
         btn_modeling.clicked.connect(lambda: controller.switch_page(4))
-        
-        btn_next = QPushButton("💾 Экспорт ➡")
+        btn_next = QPushButton("💾 К сохранению ➡")
         btn_next.clicked.connect(lambda: controller.switch_page(3))
-        
         nav.addWidget(btn_back)
         nav.addWidget(btn_modeling)
         nav.addWidget(btn_next)
         layout.addLayout(nav)
 
+    # --- ЛОГИКА ЛАМПОЧКИ ---
+    def blink(self, success=True):
+        color = "#2ecc71" if success else "#e74c3c" # Зеленый или Красный
+        self.indicator.setStyleSheet(f"background-color: {color}; border-radius: 8px; border: 1px solid white;")
+        self.blink_timer.start(800) # Потухнет через 0.8 сек
+
+    def indicator_off(self):
+        self.indicator.setStyleSheet("background-color: #555; border-radius: 8px;")
+
+    # --- ОБНОВЛЕННЫЕ МЕТОДЫ С БЛИНКОМ ---
     def refresh(self):
         df = self.controller.model.get_active_df()
         if df is not None:
             self.info.setText(f"Активный файл: {self.controller.model.active_file_name}")
-            columns = list(df.columns)
-            # Обновляем оба списка
+            cols = list(df.columns)
             self.cols.clear()
-            self.cols.addItems(columns)
+            self.cols.addItems(cols)
             self.cols_b.clear()
-            self.cols_b.addItems(columns)
+            self.cols_b.addItems(cols)
 
     def run_extract(self):
         col = self.cols.currentText()
         if self.controller.model.extract_numbers(col):
-            self.info.setText(f"✅ Числа извлечены из '{col}'")
-            self.controller.update_appbar()
+            self.blink(True)
+        else:
+            self.blink(False)
 
     def run_clean(self):
         removed = self.controller.model.clean_dropna()
-        self.info.setText(f"✅ Удалено пустых строк: {removed}")
-        self.controller.update_appbar()
+        self.blink(True) if removed >= 0 else self.blink(False)
 
     def run_math(self):
         col_a = self.cols.currentText()
         col_b = self.cols_b.currentText()
-        # Вызываем метод из нашей обновленной Model
         if self.controller.model.apply_column_math(col_a, col_b, '*'):
-            self.info.setText(f"✅ Создана колонка: {col_a}_*_{col_b}")
-            self.controller.update_appbar()
-            self.refresh() # Чтобы новая колонка появилась в списках
+            self.blink(True)
+            self.refresh()
+        else:
+            self.blink(False)
