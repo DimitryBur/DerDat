@@ -55,3 +55,46 @@ class DataManager:
             df[col_name] = pd.to_numeric(extracted.str.replace(',', '.', regex=False), errors='coerce')
             return True
         return False
+    
+
+    def smart_merge(self, file_names, method='vertical', key_column=None):
+        """
+        file_names: список названий файлов из self.all_files
+        method: 'vertical' (один под другой) или 'join' (по ключу)
+        key_column: название колонки-ключа для 'join'
+        """
+        if not file_names or len(file_names) < 2:
+            return "Нужно выбрать минимум 2 файла"
+
+        selected_dfs = [self.all_files[name] for name in file_names]
+
+        try:
+            if method == 'vertical':
+                # Просто ставим один под другой, сбрасываем индексы
+                result_df = pd.concat(selected_dfs, axis=0, ignore_index=True)
+                
+            elif method == 'join':
+                if not key_column:
+                    return "Укажите колонку-ключ для объединения"
+                
+                # Начинаем с первого файла и по цепочке приклеиваем остальные
+                result_df = selected_dfs[0]
+                for next_df in selected_dfs[1:]:
+                    # how='outer' сохранит все данные из обоих файлов
+                    result_df = pd.merge(result_df, next_df, on=key_column, how='outer')
+
+            # Сохраняем результат как новый "виртуальный" файл
+            master_name = f"Master_Result_{len(self.all_files)}"
+            self.all_files[master_name] = result_df
+            return f"Успешно! Создан файл: {master_name}"
+
+        except Exception as e:
+            return f"Ошибка объединения: {str(e)}"
+
+    def delete_asset(self, file_name):
+        """Удаление конкретного файла из памяти"""
+        if file_name in self.all_files:
+            del self.all_files[file_name]
+            return True
+        return False
+
